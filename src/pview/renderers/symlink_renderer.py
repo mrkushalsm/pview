@@ -9,12 +9,13 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from pview.utils.permissions import is_proc_path
 
 class SymlinkRenderer:
     """Render proc symlink targets with context-aware explanations."""
 
     def can_render(self, path: Path) -> bool:
-        return path.is_symlink() and "/proc/" in str(path)
+        return path.is_symlink() and is_proc_path(path)
 
     def render(self, path: Path, content: str | None) -> Panel:
         target = content.strip() if content else "<unavailable>"

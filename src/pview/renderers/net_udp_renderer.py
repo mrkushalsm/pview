@@ -9,11 +9,12 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from pview.utils.permissions import is_proc_path
 from pview.renderers.net_tcp_renderer import _hex_ip_port
 
 class NetUdpRenderer:
     def can_render(self, path: Path) -> bool:
-        return path.name in ("udp", "udp6") and "/proc/" in str(path) and "/net/" in str(path)
+        return path.name in ("udp", "udp6") and is_proc_path(path) and "/net/" in path.as_posix()
 
     def render(self, path: Path, content: str | None) -> Panel:
         if not content:

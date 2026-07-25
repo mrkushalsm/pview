@@ -8,12 +8,13 @@ from rich.console import Group
 from rich.panel import Panel
 from rich.text import Text
 
+from pview.utils.permissions import is_proc_path
 
 class OomScoreAdjRenderer:
     """Display OOM killer score adjustment setting."""
 
     def can_render(self, path: Path) -> bool:
-        return path.name == "oom_score_adj" and "/proc/" in str(path)
+        return path.name == "oom_score_adj" and is_proc_path(path)
 
     def render(self, path: Path, content: str | None) -> Panel:
         """Show user-adjustable OOM priority."""

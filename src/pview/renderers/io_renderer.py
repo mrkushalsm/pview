@@ -9,6 +9,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from pview.utils.permissions import is_proc_path
 from pview.utils.parsing import parse_key_value_line
 from pview.utils.units import kib_to_human
 
@@ -17,7 +18,7 @@ class IoRenderer:
     """Display process I/O statistics."""
 
     def can_render(self, path: Path) -> bool:
-        return path.name == "io" and "/proc/" in str(path)
+        return path.name == "io" and is_proc_path(path)
 
     def render(self, path: Path, content: str | None) -> Panel:
         """Parse and display I/O stats."""

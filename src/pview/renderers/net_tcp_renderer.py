@@ -9,6 +9,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from pview.utils.permissions import is_proc_path
 
 def _hex_ip_port(ip_hex: str, is_ipv6: bool = False) -> str:
     # Convert IPv4 hex like 0100007F:0035 to 127.0.0.1:53
@@ -34,7 +35,7 @@ class NetTcpRenderer:
     """Render /proc/*/net/tcp and tcp6 in table form with human-friendly addresses."""
 
     def can_render(self, path: Path) -> bool:
-        return path.name in ("tcp", "tcp6") and "/proc/" in str(path) and "/net/" in str(path)
+        return path.name in ("tcp", "tcp6") and is_proc_path(path) and "/net/" in path.as_posix()
 
     def render(self, path: Path, content: str | None) -> Panel:
         if not content:

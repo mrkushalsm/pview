@@ -9,12 +9,13 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from pview.utils.permissions import is_proc_path
 
 class SchedRenderer:
     """Display process scheduler information."""
 
     def can_render(self, path: Path) -> bool:
-        return path.name == "sched" and "/proc/" in str(path)
+        return path.name == "sched" and is_proc_path(path)
 
     def render(self, path: Path, content: str | None) -> Panel:
         """Parse and display scheduler stats."""

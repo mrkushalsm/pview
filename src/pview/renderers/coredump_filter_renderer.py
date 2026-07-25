@@ -8,12 +8,13 @@ from rich.console import Group
 from rich.panel import Panel
 from rich.text import Text
 
+from pview.utils.permissions import is_proc_path
 
 class CoredumpFilterRenderer:
     """Display core dump filter bitmask."""
 
     def can_render(self, path: Path) -> bool:
-        return path.name == "coredump_filter" and "/proc/" in str(path)
+        return path.name == "coredump_filter" and is_proc_path(path)
 
     def render(self, path: Path, content: str | None) -> Panel:
         """Show which memory regions are included in core dumps."""

@@ -9,6 +9,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from pview.utils.permissions import is_proc_path
 from pview.utils.units import kib_to_human
 
 
@@ -16,7 +17,7 @@ class MapsRenderer:
     """Visualize process memory map regions."""
 
     def can_render(self, path: Path) -> bool:
-        return path.name == "maps" and "/proc/" in str(path)
+        return path.name == "maps" and is_proc_path(path)
 
     def render(self, path: Path, content: str | None) -> Panel:
         """Parse and display memory map regions."""

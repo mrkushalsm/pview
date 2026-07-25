@@ -9,12 +9,13 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from pview.utils.permissions import is_proc_path
 
 class NamespacesRenderer:
     """Display process namespaces (container/isolation info)."""
 
     def can_render(self, path: Path) -> bool:
-        return path.name == "ns" and "/proc/" in str(path)
+        return path.name == "ns" and is_proc_path(path)
 
     def render(self, path: Path, content: str | None) -> Panel:
         """Parse namespace symlinks to show isolation."""

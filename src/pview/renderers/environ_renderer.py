@@ -9,12 +9,13 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from pview.utils.permissions import is_proc_path
 
 class EnvironRenderer:
     """Display process environment variables."""
 
     def can_render(self, path: Path) -> bool:
-        return path.name == "environ" and "/proc/" in str(path)
+        return path.name == "environ" and is_proc_path(path)
 
     def render(self, path: Path, content: str | None) -> Panel:
         """Parse and display environment variables."""

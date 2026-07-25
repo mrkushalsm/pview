@@ -9,12 +9,13 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from pview.utils.permissions import is_proc_path
 
 class NumaMapsRenderer:
     """Display NUMA node memory distribution."""
 
     def can_render(self, path: Path) -> bool:
-        return path.name == "numa_maps" and "/proc/" in str(path)
+        return path.name == "numa_maps" and is_proc_path(path)
 
     def render(self, path: Path, content: str | None) -> Panel:
         """Parse numa_maps to show memory distribution across NUMA nodes."""

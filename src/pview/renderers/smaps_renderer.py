@@ -9,6 +9,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from pview.utils.permissions import is_proc_path
 from pview.utils.units import kib_to_human
 
 
@@ -16,7 +17,7 @@ class SmapsRenderer:
     """Display detailed memory maps with proportional set size."""
 
     def can_render(self, path: Path) -> bool:
-        return path.name == "smaps" and "/proc/" in str(path)
+        return path.name == "smaps" and is_proc_path(path)
 
     def render(self, path: Path, content: str | None) -> Panel:
         """Parse smaps to show memory breakdown per region."""

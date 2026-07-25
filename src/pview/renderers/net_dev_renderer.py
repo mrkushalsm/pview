@@ -9,9 +9,10 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from pview.utils.permissions import is_proc_path
 class NetDevRenderer:
     def can_render(self, path: Path) -> bool:
-        return path.name == "dev" and "/proc/" in str(path) and "/net/" in str(path)
+        return path.name == "dev" and is_proc_path(path) and "/net/" in path.as_posix()
 
     def render(self, path: Path, content: str | None) -> Panel:
         if not content:

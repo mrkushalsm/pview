@@ -7,11 +7,12 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from pview.utils.permissions import is_proc_path
 
 class TaskRenderer:
     def can_render(self, path: Path) -> bool:
         # Matches the task directory itself
-        return path.name == "task" and "/proc/" in str(path)
+        return path.name == "task" and is_proc_path(path)
 
     def render(self, path: Path, content: str | None) -> Panel:
         try:

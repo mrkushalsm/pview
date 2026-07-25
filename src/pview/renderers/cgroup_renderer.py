@@ -8,12 +8,13 @@ from rich.console import Group
 from rich.panel import Panel
 from rich.text import Text
 
+from pview.utils.permissions import is_proc_path
 
 class CgroupRenderer:
     """Display cgroup membership."""
 
     def can_render(self, path: Path) -> bool:
-        return path.name == "cgroup" and "/proc/" in str(path)
+        return path.name == "cgroup" and is_proc_path(path)
 
     def render(self, path: Path, content: str | None) -> Panel:
         """Show which cgroups the process belongs to."""
