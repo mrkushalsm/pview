@@ -80,7 +80,11 @@ class PViewApp(App[None]):
         super().__init__()
         self._tree_model = ProcTreeModel()
         self._renderers = RendererRegistry()
-        self._dir_renderer = DirectoryRenderer()
+        self._dir_renderer = DirectoryRenderer(
+            model=self._tree_model,
+            reader=self._tree_model.reader,
+            registry=self._renderers,
+        )
         self._last_node: ProcNode | None = None
 
     def compose(self) -> ComposeResult:
@@ -105,7 +109,7 @@ class PViewApp(App[None]):
             detail.update(renderable)
             status.update(f"{node.path}: directory")
         elif node.node_type == NodeType.SYMLINK:
-            result = self._tree_model._reader.read_link(node.path)
+            result = self._tree_model.reader.read_link(node.path)
             renderable = self._renderers.render(node.path, result.content)
             detail.update(renderable)
             if result.error is not None:
@@ -120,7 +124,7 @@ class PViewApp(App[None]):
             else:
                 status.update(f"{node.path}: link -> {result.content}")
         else:
-            result = self._tree_model._reader.read_text(node.path)
+            result = self._tree_model.reader.read_text(node.path)
             renderable = self._renderers.render(node.path, result.content)
             detail.update(renderable)
             if result.error is not None:
@@ -194,9 +198,9 @@ class PViewApp(App[None]):
         def _do_read() -> tuple[object, object]:
             logging.debug('[retry-thread-start] in background thread')
             if node.node_type == NodeType.SYMLINK:
-                result = self._tree_model._reader.read_link(node.path)
+                result = self._tree_model.reader.read_link(node.path)
             else:
-                result = self._tree_model._reader.read_text(node.path)
+                result = self._tree_model.reader.read_text(node.path)
             logging.debug('[retry-thread-read] got result: error=%s', result.error)
             renderable = self._renderers.render(node.path, result.content)
             logging.debug('[retry-thread-render] rendered')

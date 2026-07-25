@@ -16,6 +16,18 @@ class ProcTreeModel:
         self._reader = ProcReader()
         self._process_cache: dict[int, str] = {}
 
+
+    @property
+    def reader(self) -> ProcReader:
+        return self._reader
+
+    @property
+    def sudo(self):
+        return self._reader.sudo
+
+    @property
+    def reader(self) -> ProcReader:
+        return self._reader
     async def get_children(self, parent_path: Path) -> list[ProcNode]:
         """Lazily enumerate children of a proc directory."""
         return await asyncio.to_thread(self._sync_get_children, parent_path)
