@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
@@ -141,7 +142,6 @@ class PViewApp(App[None]):
             logging.debug('[pop-cancel] dismissing modal: no password')
             self.pop_screen()
             return
-        import asyncio
         try:
             # Run the blocking password verification in a thread to avoid freezing the event loop
             logging.debug('[1] Verifying sudo password...')
@@ -171,36 +171,8 @@ class PViewApp(App[None]):
         logging.debug('[pop-cancel-handler] dismissing modal')
         self.pop_screen()
 
-    def _retry_last_node(self) -> None:
-        node = self._last_node
-        if node is None:
-            return
-        detail = self.query_one(DetailPane)
-        status = self.query_one(StatusBar)
-
-        if node.node_type in (NodeType.DIRECTORY, NodeType.PROCESS):
-            renderable = self._dir_renderer.render(node.path, node.node_type)
-            detail.update(renderable)
-            status.update(f"{node.path}: directory")
-            return
-
-        # kept for backward compatibility; prefer async _perform_retry for actual use
-        # synchronous fallback: perform read in thread to avoid blocking
-        import asyncio
-
-        def _do_read() -> tuple[object, object]:
-            if node.node_type == NodeType.SYMLINK:
-                result = self._tree_model._reader.read_link(node.path)
-            else:
-                result = self._tree_model._reader.read_text(node.path)
-            return result, self._renderers.render(node.path, result.content)
-
-            # Schedule the async retry which performs blocking reads in a thread
-            asyncio.create_task(self._perform_retry())
-
     async def _perform_retry(self) -> None:
         """Async retry that runs blocking reads in a background thread, then updates UI."""
-        import asyncio
         logging.debug('[retry-start] _perform_retry called')
         node = self._last_node
         if node is None:
