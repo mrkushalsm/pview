@@ -1,14 +1,16 @@
-"""Search modal for fuzzy-finding proc entries by PID or process name."""
+"""Search modal for fuzzy-finding proc entries by PID or process name.
+
+Keyboard-driven UX: type to filter, arrows to navigate results, Enter to jump.
+"""
 
 from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.message import Message
-from textual.widgets import Input, Static, Button
+from textual.widgets import Input, Static
 from textual.screen import ModalScreen
 from textual import events
-from textual.widget import Widget
 
 
 class JumpToNode(Message):
@@ -24,7 +26,7 @@ class SearchCancelled(Message):
 
 
 class SearchModal(ModalScreen):
-    """Modal with a text input to search the proc tree."""
+    """Modal with input + selectable result list for proc tree navigation."""
 
     DEFAULT_CSS = """
     SearchModal {
@@ -34,7 +36,6 @@ class SearchModal(ModalScreen):
     SearchModal > #search-container {
         width: 60%;
         max-width: 80;
-        min-width: 40;
         border: heavy $panel;
         padding: 1 2;
         background: $panel;
@@ -45,14 +46,21 @@ class SearchModal(ModalScreen):
         padding-bottom: 1;
         width: 100%;
     }
-    SearchModal > #search-container > Static#search-results {
-        height: auto;
-        max-height: 12;
-        margin-top: 1;
-        padding: 0 1;
-    }
     SearchModal > #search-container Input {
         width: 100%;
+        margin-bottom: 1;
+    }
+    #search-results {
+        height: auto;
+        max-height: 12;
+        padding: 0 1;
+    }
+    .result-line {
+        padding: 0 1;
+    }
+    .result-line.highlighted {
+        background: $accent;
+        color: $text;
     }
     """
 
@@ -60,10 +68,11 @@ class SearchModal(ModalScreen):
         super().__init__()
         self._labels = labels
         self._filtered: list[str] = []
+        self._cursor: int = 0
 
     def compose(self) -> ComposeResult:
         with Vertical(id="search-container"):
-            yield Static("Search by PID or name (type to filter):", id="search-title")
+            yield Static("Search: type PID or name, arrows to pick, Enter to jump, Esc to cancel", id="search-title")
             yield Input(placeholder="e.g. 1234, firefox, sshd...", id="search-input")
             yield Static("", id="search-results")
 
@@ -72,49 +81,69 @@ class SearchModal(ModalScreen):
         inp.focus()
 
     def on_input_changed(self, event: Input.Changed) -> None:
-        """Filter the candidate list as the user types."""
+        """Filter candidates and reset cursor."""
         query = event.value.strip().lower()
-        results: list[str] = []
         if query:
-            for label in self._labels:
-                if query in label.lower():
-                    results.append(label)
-            self._filtered = results
+            self._filtered = [lbl for lbl in self._labels if query in lbl.lower()]
         else:
-            self._filtered = []
+            self._filtered = list(self._labels)
+        self._cursor = 0
+        self._render_results()
 
+    def _render_results(self) -> None:
+        """Render the filtered list with cursor highlight."""
         status = self.query_one("#search-results", Static)
-        if query:
-            if self._filtered:
-                status.update("\n".join(self._filtered[:8]))
+        if not self._filtered:
+            status.update("[dim]No matches[/dim]")
+            return
+
+        lines: list[str] = []
+        for idx, label in enumerate(self._filtered):
+            if idx >= 12:
+                break
+            if idx == self._cursor:
+                lines.append(f"[reverse] {label} [/reverse]")
             else:
-                status.update("[dim]No matches[/dim]")
+                lines.append(f"  {label}")
+        status.update("\n".join(lines))
+
+    def _clamp_cursor(self) -> None:
+        if self._filtered:
+            self._cursor = max(0, min(self._cursor, len(self._filtered) - 1))
         else:
-            status.update("")
+            self._cursor = 0
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Jump to the first match on Enter, or use exact input."""
+        """Enter pressed: jump to the cursor-selected match."""
         query = event.value.strip()
         if not query:
-            # No input: post cancel
             self.post_message(SearchCancelled())
             return
 
-        target: str = query
-
-        # If filtered results are available, pick the first
         if self._filtered:
-            target = self._filtered[0]
-        else:
-            # Check if the typed string matches anything exactly (PID number)
-            for label in self._labels:
-                if label.startswith(query) or query == label:
-                    target = label
-                    break
+            target = self._filtered[self._cursor]
+            self.post_message(JumpToNode(target))
+            return
 
-        self.post_message(JumpToNode(target))
+        # No results: try matching raw input against labels as fallback
+        for label in self._labels:
+            if label.lower().startswith(query.lower()):
+                self.post_message(JumpToNode(label))
+                return
+
+        self.post_message(SearchCancelled())
 
     async def on_key(self, event: events.Key) -> None:
-        if event.key == "escape":
+        if event.key == "down":
+            self._cursor += 1
+            self._clamp_cursor()
+            self._render_results()
+            event.stop()
+        elif event.key == "up":
+            self._cursor -= 1
+            self._clamp_cursor()
+            self._render_results()
+            event.stop()
+        elif event.key == "escape":
             self.post_message(SearchCancelled())
             event.stop()
