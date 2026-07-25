@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
@@ -102,6 +103,9 @@ class PViewApp(App[None]):
             registry=self._renderers,
         )
         self._last_node: ProcNode | None = None
+        self._live_active: bool = False
+        self._live_timer: asyncio.Task | None = None
+        self._live_previous_content: str = ""
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -119,6 +123,12 @@ class PViewApp(App[None]):
         detail = self.query_one(DetailPane)
         status = self.query_one(StatusBar)
         self._last_node = node
+        # Cancel live mode when navigating away
+        if self._live_active:
+            if self._live_timer is not None:
+                self._live_timer.cancel()
+                self._live_timer = None
+            self._live_active = False
 
         if node.node_type in (NodeType.DIRECTORY, NodeType.PROCESS):
             renderable = self._dir_renderer.render(node.path, node.node_type)
@@ -247,6 +257,58 @@ class PViewApp(App[None]):
     def action_toggle_help(self) -> None:
         self.notify("Help screen will be added in the next iteration.")
 
+
+    async def _live_tick(self) -> None:
+        """Refresh the current node and show diff."""
+        node = self._last_node
+        if node is None or not self._live_active:
+            return
+        new_content = ""
+        if node.node_type == NodeType.SYMLINK:
+            result = await asyncio.to_thread(self._tree_model.reader.read_link, node.path)
+            new_content = result.content or ""
+        else:
+            result = await asyncio.to_thread(self._tree_model.reader.read_text, node.path)
+            new_content = result.content or ""
+
+        prev = self._live_previous_content
+        self._live_previous_content = new_content
+
+        if prev and prev != new_content:
+            diff_renderable = self._diff_text(node.path, prev, new_content)
+            self.query_one(DetailPane).update(diff_renderable)
+        elif prev:
+            self.query_one(StatusBar).update("● LIVE (no change)")
+        else:
+            renderable = self._renderers.render(node.path, new_content)
+            self.query_one(DetailPane).update(renderable)
+
+    def _diff_text(self, path: Path, old: str, new: str) -> Panel:
+        """Build a Rich Panel showing line-level diffs."""
+        import difflib
+        from rich.text import Text
+        from rich.panel import Panel
+        old_lines = old.splitlines()
+        new_lines = new.splitlines()
+        diff = difflib.unified_diff(
+            old_lines, new_lines,
+            fromfile=str(path), tofile='now', lineterm=''
+        )
+        diff_lines = list(diff)
+        if not diff_lines:
+            return Panel(Text(f"No changes in {path.name}", style="dim"), title="Live Diff")
+        output = Text()
+        for line in diff_lines[:40]:
+            if line.startswith("+"):
+                output.append(line + "\n", style="green")
+            elif line.startswith("-"):
+                output.append(line + "\n", style="red")
+            elif line.startswith("@@"):
+                output.append(line + "\n", style="cyan")
+            else:
+                output.append(line + "\n", style="dim")
+        return Panel(output, title=f"Live Diff: {path.name}")
+
     def action_search(self) -> None:
         """Open the fuzzy search modal to jump to a proc entry."""
         self.post_message(ShowSearchRequest())
@@ -267,8 +329,23 @@ class PViewApp(App[None]):
         self.notify("Bookmark support will be added in the next iteration.")
 
     def action_toggle_live(self) -> None:
-        self.notify("Live mode hook reserved for refresh engine integration.")
-
+        """Toggle live refresh for the current file entry."""
+        self._live_active = not self._live_active
+        status = self.query_one(StatusBar)
+        if self._live_active:
+            node = self._last_node
+            if node is None or node.node_type in (NodeType.DIRECTORY, NodeType.PROCESS):
+                self.notify('Live mode requires a file or symlink entry')
+                self._live_active = False
+                return
+            self._live_previous_content = ""
+            self._live_timer = self.set_interval(1.0, self._live_tick)
+            status.update('● LIVE - refreshing every 1s')
+        else:
+            if self._live_timer is not None:
+                self._live_timer.cancel()
+                self._live_timer = None
+            status.update('○ Live mode off')
 
 def main() -> None:
     """Run the application."""
