@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 import subprocess
 from typing import Optional
+
+
+class ProcReadError(Enum):
+    """Structured error kinds for procfs reads."""
+
+    ENTRY_DISAPPEARED = "entry_disappeared"
+    PERMISSION_DENIED = "permission_denied"
+    OS_ERROR = "os_error"
 
 
 @dataclass(frozen=True)
@@ -14,7 +23,8 @@ class ProcReadResult:
 
     path: Path
     content: str | None
-    error: str | None = None
+    error: ProcReadError | None = None
+    error_detail: str = ""  # Human-readable detail, e.g. the OSError message
 
 
 class ProcReader:
@@ -27,32 +37,33 @@ class ProcReader:
         try:
             return ProcReadResult(path=path, content=path.read_text(encoding="utf-8", errors="replace"))
         except FileNotFoundError:
-            return ProcReadResult(path=path, content=None, error="entry disappeared")
+            return ProcReadResult(path=path, content=None, error=ProcReadError.ENTRY_DISAPPEARED)
         except PermissionError:
-            # Try a non-interactive sudo read first
             try:
                 content = self.sudo.sudo_cat(path)
                 return ProcReadResult(path=path, content=content)
             except PermissionError:
-                return ProcReadResult(path=path, content=None, error="permission denied")
+                return ProcReadResult(path=path, content=None, error=ProcReadError.PERMISSION_DENIED)
         except OSError as exc:
-            return ProcReadResult(path=path, content=None, error=str(exc))
+            return ProcReadResult(
+                path=path, content=None, error=ProcReadError.OS_ERROR, error_detail=str(exc)
+            )
 
     def read_link(self, path: Path) -> ProcReadResult:
         try:
             return ProcReadResult(path=path, content=str(path.readlink()))
         except FileNotFoundError:
-            return ProcReadResult(path=path, content=None, error="entry disappeared")
+            return ProcReadResult(path=path, content=None, error=ProcReadError.ENTRY_DISAPPEARED)
         except PermissionError:
-            # Try reading link via sudo-aware helper
             try:
-                # reading a symlink target via sudo: readlink requires privileged reads in some cases
                 content = self.sudo.sudo_readlink(path)
                 return ProcReadResult(path=path, content=content)
             except PermissionError:
-                return ProcReadResult(path=path, content=None, error="permission denied")
+                return ProcReadResult(path=path, content=None, error=ProcReadError.PERMISSION_DENIED)
         except OSError as exc:
-            return ProcReadResult(path=path, content=None, error=str(exc))
+            return ProcReadResult(
+                path=path, content=None, error=ProcReadError.OS_ERROR, error_detail=str(exc)
+            )
 
 
 class SudoManager:
@@ -87,14 +98,12 @@ class SudoManager:
             return False
 
     def sudo_cat(self, path: Path) -> str:
-        # Try non-interactive sudo first
         if self.can_sudo_noninteractive():
             proc = subprocess.run(["sudo", "cat", str(path)], capture_output=True)
             if proc.returncode == 0:
                 return proc.stdout.decode(errors="replace")
             raise PermissionError("sudo failed")
 
-        # Use cached password if available
         if self._has_cached():
             proc = subprocess.run(["sudo", "-S", "cat", str(path)], input=(self._password + "\n").encode(), capture_output=True)
             if proc.returncode == 0:
@@ -104,7 +113,6 @@ class SudoManager:
         raise PermissionError("no sudo available")
 
     def sudo_readlink(self, path: Path) -> str:
-        # readlink via sudo: use `readlink -f` to get canonical target
         if self.can_sudo_noninteractive():
             proc = subprocess.run(["sudo", "readlink", "-f", str(path)], capture_output=True)
             if proc.returncode == 0:

@@ -8,6 +8,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Footer, Header, Static
 
+from pview.core.proc_reader import ProcReadError
 from pview.core.proc_tree_model import ProcTreeModel
 from pview.models.proc_node import NodeType, ProcNode
 from pview.renderers.directory_renderer import DirectoryRenderer
@@ -20,6 +21,15 @@ import logging
 logging.basicConfig(filename='/tmp/pview.log', level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
 from textual.message import Message
 
+
+
+def _error_label(result: ProcReadResult) -> str:
+    """Return a human-readable error label for a ProcReadResult."""
+    if result.error is None:
+        return ''
+    if result.error_detail:
+        return f'{result.error.value}: {result.error_detail}'
+    return result.error.value
 
 class ShowPasswordRequest(Message):
     """Message to request the password modal be shown from the event loop."""
@@ -114,13 +124,13 @@ class PViewApp(App[None]):
             detail.update(renderable)
             if result.error is not None:
                 # If permission denied, prompt password modal automatically
-                if result.error == "permission denied" and not self._tree_model._reader.sudo._has_cached():
+                if result.error == ProcReadError.PERMISSION_DENIED and not self._tree_model._reader.sudo._has_cached():
                     # Push the password modal as a screen so it floats centered
                     # Post a message so the async message handler can await push_screen
                     self.post_message(ShowPasswordRequest())
                     status.update(f"{node.path}: permission required")
                     return
-                status.update(f"{node.path}: {result.error}")
+                status.update(f"{node.path}: {_error_label(result)}")
             else:
                 status.update(f"{node.path}: link -> {result.content}")
         else:
@@ -129,11 +139,11 @@ class PViewApp(App[None]):
             detail.update(renderable)
             if result.error is not None:
                 # If permission denied, prompt password modal automatically
-                if result.error == "permission denied" and not self._tree_model._reader.sudo._has_cached():
+                if result.error == ProcReadError.PERMISSION_DENIED and not self._tree_model._reader.sudo._has_cached():
                     self.post_message(ShowPasswordRequest())
                     status.update(f"{node.path}: permission required")
                     return
-                status.update(f"{node.path}: {result.error}")
+                status.update(f"{node.path}: {_error_label(result)}")
             else:
                 status.update(f"{node.path}: loaded")
 
@@ -214,7 +224,7 @@ class PViewApp(App[None]):
             detail.update(renderable)
             logging.debug('[retry-after-update] detail.update returned')
             if result.error is not None:
-                status.update(f"{node.path}: {result.error}")
+                status.update(f"{node.path}: {_error_label(result)}")
             else:
                 status.update(f"{node.path}: loaded (sudo)")
             logging.debug('[retry-end-success] all updates done')
