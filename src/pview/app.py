@@ -8,12 +8,13 @@ from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Footer, Header, Static
 
-from pview.core.proc_reader import ProcReadError
+from pview.core.proc_reader import ProcReadError, ProcReadResult
 from pview.core.proc_tree_model import ProcTreeModel
 from pview.models.proc_node import NodeType, ProcNode
 from pview.renderers.directory_renderer import DirectoryRenderer
 from pview.renderers.registry import RendererRegistry
 from pview.widgets.explorer_tree import ProcExplorerTree
+from pview.widgets.search_modal import SearchModal, JumpToNode, SearchCancelled
 from pview.widgets.password_modal import PasswordModal, PasswordSubmitted, PasswordCancelled
 import logging
 
@@ -30,6 +31,11 @@ def _error_label(result: ProcReadResult) -> str:
     if result.error_detail:
         return f'{result.error.value}: {result.error_detail}'
     return result.error.value
+
+
+class ShowSearchRequest(Message):
+    """Request the search modal."""
+    pass
 
 class ShowPasswordRequest(Message):
     """Message to request the password modal be shown from the event loop."""
@@ -124,7 +130,7 @@ class PViewApp(App[None]):
             detail.update(renderable)
             if result.error is not None:
                 # If permission denied, prompt password modal automatically
-                if result.error == ProcReadError.PERMISSION_DENIED and not self._tree_model._reader.sudo._has_cached():
+                if result.error == ProcReadError.PERMISSION_DENIED and not self._tree_model.sudo._has_cached():
                     # Push the password modal as a screen so it floats centered
                     # Post a message so the async message handler can await push_screen
                     self.post_message(ShowPasswordRequest())
@@ -139,7 +145,7 @@ class PViewApp(App[None]):
             detail.update(renderable)
             if result.error is not None:
                 # If permission denied, prompt password modal automatically
-                if result.error == ProcReadError.PERMISSION_DENIED and not self._tree_model._reader.sudo._has_cached():
+                if result.error == ProcReadError.PERMISSION_DENIED and not self._tree_model.sudo._has_cached():
                     self.post_message(ShowPasswordRequest())
                     status.update(f"{node.path}: permission required")
                     return
@@ -159,7 +165,7 @@ class PViewApp(App[None]):
         try:
             # Run the blocking password verification in a thread to avoid freezing the event loop
             logging.debug('[1] Verifying sudo password...')
-            ok = await asyncio.to_thread(self._tree_model._reader.sudo.cache_password, password)
+            ok = await asyncio.to_thread(self._tree_model.sudo.cache_password, password)
             logging.debug('[2] cache_password returned: %s', ok)
             if not ok:
                 status.update("Sudo: authentication failed")
@@ -242,8 +248,21 @@ class PViewApp(App[None]):
         self.notify("Help screen will be added in the next iteration.")
 
     def action_search(self) -> None:
-        self.notify("Search palette will be added in the next iteration.")
+        """Open the fuzzy search modal to jump to a proc entry."""
+        self.post_message(ShowSearchRequest())
 
+    async def on_show_search_request(self, message: ShowSearchRequest) -> None:
+        tree = self.query_one(ProcExplorerTree)
+        labels = tree.collect_labels()
+        await self.push_screen(SearchModal(labels))
+
+    async def on_jump_to_node(self, message: JumpToNode) -> None:
+        tree = self.query_one(ProcExplorerTree)
+        tree.jump_to_label(message.label)
+        self.pop_screen()
+
+    async def on_search_cancelled(self, message: SearchCancelled) -> None:
+        self.pop_screen()
     def action_bookmark(self) -> None:
         self.notify("Bookmark support will be added in the next iteration.")
 
